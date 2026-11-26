@@ -154,7 +154,15 @@ Decision: GV200-005s are the truck's main contactors. Channel 1 = positive main,
 
 ## 6. Connectors
 
-J1 Molex Micro-Fit 3.0 43045-1400 (2×7, right angle; mates with 43025-1400). Pad n is above pad n+7.
+J1 Molex Micro-Fit 3.0 43045-1400 (2×7, right angle; mates with 43025-1400). On the board, pads 1–7
+are the row nearest the connector opening (top board edge), and pads 8–14 sit behind them. Wire the
+harness by the pin numbers moulded on the plug housing, not by "upper" or "lower" row.
+
+Pinout audit (2026-11-26): every non-passive part was checked against its datasheet: symbol pin, net,
+and footprint pad. Parts checked: TPS1H100-Q1 (version A), UCC27517, TPS7B6950-Q1, INA240 (PW),
+AP2112K, AOD4185 and AOD2610E (G = pad 1, D = tab, S = pad 3), BAT54S, 2N7002, SRV05-4 and
+STM32G031K8. The firmware pin assignments were also checked against the STM32 pin numbers, and all
+13 LCSC numbers against their intended MPNs. No mismatches were found.
 
 | Pin | Signal | Pin | Signal |
 |---|---|---|---|
