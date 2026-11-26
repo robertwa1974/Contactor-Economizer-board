@@ -361,8 +361,8 @@ Logic pins are 3.3 V. Each passes through a 1 kΩ resistor and an ESD clamp on t
 | 5 | CONT1_CLOSED | to IMD | Channel 1 coil energised (see below) |
 | 6 | CONT2_CLOSED | to IMD | Channel 2 coil energised |
 | 7 | IMD_INHIBIT | to IMD | High = ask the IMD to stop measuring. Reserved: firmware v3 holds it low. |
-| 9 | IMD_TX | to IMD | Reserved UART (this board's TX, to the IMD's RX). Not used by firmware v3. |
-| 10 | IMD_RX | from IMD | Reserved UART (the IMD's TX) |
+| 9 | IMD_TX | to IMD | UART, this board's TX (USART1 PB6) to the IMD's RX: `imd send` (section 8.5) |
+| 10 | IMD_RX | from IMD | UART, the IMD's TX to this board (USART1 PB7): IMD status frames (section 8.5) |
 | 11 | IMD_MHS | from IMD | Passed straight to J1 pin 4 |
 | 12 | IMD_OKHS | from IMD | Passed straight to J1 pin 11 |
 
@@ -413,6 +413,24 @@ With `imd required`:
   `W=IMD_LOST` for that channel until the command is removed. STAT and the LED are not affected.
   The IMD's own OKHS output tells the VCU.
 
+### 8.5 IMD status over the UART (firmware v3.1)
+
+The IMD board sends a status frame every 0.5 s on socket pin 10. This board shows it but **never
+acts on it**: the interlock above uses the IMD_OK wire only, so a dead or garbled UART cannot block
+or open a contactor.
+
+- `imd` shows IMD_OK and the last frame: mode, state, OKHS, insulation HV+ and HV- to chassis (Rp,
+  Rn in kΩ, `INF` = no measurable leakage), pack voltage, the age of the IMD's last valid measurement,
+  calibration (`G` gain, `B` bridge) and pack/system scope. `LOST` = no valid frame for 2 s.
+- The status line ends with the IMD mode and Rp/Rn while the link is up (section 9).
+- `imd send <text>` passes one command line to the IMD; its replies appear prefixed `IMD> `.
+  For example `imd send CAL` shows the IMD's calibration. IMD calibration commands (`CAL ...`)
+  are refused unless both channels are off, because calibrating stops the IMD from monitoring.
+- `imd log on` also echoes the IMD's own once-a-second status line.
+
+The frame format is defined in the IMD board repository (`lib/imd_core/imd_proto.h`); this board
+carries a copy in `lib/imd_proto/`.
+
 ---
 
 ## 9. Indicators and status
@@ -426,7 +444,7 @@ With `imd required`:
 ### Serial status line
 
 ```
-Vbat=12.84 | ch1 HOLD I=0.301 D=12.6% F=0x0 CLOSED | ch2 OFF I=0.000 D=0.0% F=0x0 | IMD=ok req
+Vbat=12.84 | ch1 HOLD I=0.301 D=12.6% F=0x0 CLOSED | ch2 OFF I=0.000 D=0.0% F=0x0 | IMD=ok req NORM Rp=20410k Rn=19870k
 ```
 
 - `Vbat`: supply voltage after the reverse-polarity stage.
@@ -436,7 +454,9 @@ Vbat=12.84 | ch1 HOLD I=0.301 D=12.6% F=0x0 CLOSED | ch2 OFF I=0.000 D=0.0% F=0x
 - `CLOSED`: the channel's CONTx_CLOSED output is high (section 8.2).
 - `W=IMD_LOST`: IMD_OK dropped while this channel was closed (warning only).
 - `IMD=`: `ok` (high for 2 s or more), `qual` (high, still qualifying) or `low`, then `req` or `opt`
-  for the `imd` setting.
+  for the `imd` setting. Then, from the IMD's UART frames (section 8.5): its mode (`NORM`, `DEV`,
+  `EARTH`, ...), Rp and Rn, and its state if not OK (`DEG`, `INT`, `CAL`); or `link=LOST` /
+  `link=-` (no frame yet, e.g. no IMD fitted).
 
 | State | Meaning |
 |---|---|
@@ -467,8 +487,8 @@ fault clears when the VCU removes the command.
 
 ## 10. Serial commands
 
-The settings commands (`preset`, `set`, `imd`, `save`, `defaults`) work only while both channels are
-off.
+The settings commands (`preset`, `set`, `imd required|optional`, `save`, `defaults`) work only while
+both channels are off. `imd`, `imd send` and `imd log` work any time (except `imd send CAL ...`).
 
 | Command | Does |
 |---|---|
@@ -484,6 +504,9 @@ off.
 | `set <1\|2> oc <A>` | Overcurrent trip, 0 = automatic, maximum 6.5 A |
 | `save` | Store the settings in flash. Nothing changes permanently without this. |
 | `imd <required\|optional>` | Refuse to close unless the IMD reports OK (section 8.4). Default `optional`. |
+| `imd` | IMD_OK and the IMD's last status frame (section 8.5) |
+| `imd send <text>` | Pass a command to the IMD, e.g. `imd send CAL`; replies show as `IMD> ...` |
+| `imd log <on\|off>` | Also show the IMD's own status line |
 | `defaults` | Reset both channels to unconfigured and IMD checking to optional (not saved until `save`) |
 | `log <on\|off>` | Status line every 0.5 s |
 

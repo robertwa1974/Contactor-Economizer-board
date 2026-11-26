@@ -149,7 +149,7 @@ Decision: GV200-005s are the truck's main contactors. Channel 1 = positive main,
 | 18 | PA8 | CONT1_CLOSED | Output |
 | 20 | PC6 | CONT2_CLOSED | Output |
 | 27 | PB3 | IMD_INHIBIT | Output (held low) |
-| 30, 31 | PB6, PB7 | IMD_TX/RX | USART1 AF0, reserved |
+| 30, 31 | PB6, PB7 | IMD_TX/RX | USART1 AF0: IMD status frames in, `imd send` out (fw v3.1, information only) |
 | 12, 17, 2, 3 | PA5, PB2, PC14, PC15 | — | Free |
 
 ## 6. Connectors
@@ -182,7 +182,7 @@ J4 IMD stacking socket (2×6, 2.54 mm, odd pins in one row):
 | 3 | IMD_OK (in, 3.3 V, 100k pull-down) | 4 | GND |
 | 5 | CONT1_CLOSED (out) | 6 | CONT2_CLOSED (out) |
 | 7 | IMD_INHIBIT (out, reserved) | 8 | GND |
-| 9 | IMD_TX (economizer TX, reserved) | 10 | IMD_RX (reserved) |
+| 9 | IMD_TX (economizer TX, `imd send`) | 10 | IMD_RX (IMD status frames) |
 | 11 | IMD_MHS (to J1-4) | 12 | IMD_OKHS (to J1-11) |
 
 J2 SWD (1×5 right angle): 1 3V3, 2 SWDIO, 3 SWCLK, 4 NRST, 5 GND. J3 UART (1×3 right angle):
@@ -303,4 +303,5 @@ J2 SWD (1×5 right angle): 1 3V3, 2 SWDIO, 3 SWCLK, 4 NRST, 5 GND. J3 UART (1×3
       switched-resistor bridge, HV-side STM32G0, UCC12050 isolated supply, IR155-compatible MHS/OKHS
       outputs; ≤ 1 W from 12V_PROT; 3.3 V logic on J4; cut-out over J1; header reaching the 8.5 mm
       socket across a 15 mm stack.
-- [ ] Optional future: drive IMD_INHIBIT (e.g. during DC fast charging) and use the USART1 link.
+- [x] USART1 link to the IMD (fw v3.1): status frames shown, `imd send` pass-through; information only.
+- [ ] Optional future: drive IMD_INHIBIT (e.g. during DC fast charging).

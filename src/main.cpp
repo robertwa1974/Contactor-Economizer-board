@@ -1,4 +1,5 @@
 // Contactor economizer - two channels, STM32G031K8 (STM32duino / PlatformIO)
+// v3.1: IMD status over USART1 (information only) + "imd send" pass-through.
 // v3: rev B board (IMD interface). v2: general-purpose. Pick-up AND hold are current-regulated, so the peak coil
 // current is the pick-up setting, not battery voltage / coil resistance.
 // Per-channel profiles live in flash and are set over the USB serial port.
@@ -12,6 +13,8 @@
 //  - Optional IMD (rev B): with "imd required", a close is refused unless IMD_OK has
 //    been high for 2 s. Losing IMD_OK while closed is only a warning: the IMD never
 //    forces an open; the VCU decides.
+//  - The IMD's UART frames (USART1) are INFORMATION ONLY: shown on the console, never used
+//    for any decision. The interlock uses the IMD_OK wire alone.
 //  - Settings can only be changed or saved while both channels are OFF.
 //  - Factory default is "unconfigured": a channel will not energize until a
 //    profile is chosen and saved.
@@ -21,6 +24,7 @@
 #include <string.h>
 #include <IWatchdog.h>
 #include <EEPROM.h>   // pulls in the buffered flash-EEPROM helpers
+#include "imd_proto.h" // lib/imd_proto: copy of the IMD repo's frame format
 
 // ---------------- Hardware limits (set by the PCB parts) ----------------
 static const float HW_MAX_PICKUP_A = 5.0f;   // largest pick-up a profile may request
@@ -66,10 +70,10 @@ static const float VBAT_V_PER_V   = 15.0f / 115.0f;
 // ---------------- Pins ----------------
 static const uint32_t PIN_VBAT = PA4;
 static const uint32_t PWM_HZ   = 20000;
-// IMD stacking socket (J4). PB6/PB7 are reserved for USART1 to the IMD (no code yet;
-// left in their reset state).
+// IMD stacking socket (J4). USART1 on PB6 (TX, socket pin 9) / PB7 (RX, socket pin 10).
 static const uint32_t PIN_IMD_OK      = PA15;  // input, 100k pull-down: high = insulation OK
 static const uint32_t PIN_IMD_INHIBIT = PB3;   // output, high = ask the IMD to pause measuring
+static const uint32_t IMD_LINK_MS     = 2000;  // no valid frame for this long = link lost (frames every 500 ms)
 
 struct ChannelPins {
   uint32_t isense, pwm, timCh, cmd, kill, hsStatus, status, closed;
@@ -160,6 +164,16 @@ static bool logOn = true;
 static bool imdOkRaw = false;          // IMD_OK pin level this cycle
 static bool imdOkQualified = false;    // high continuously for IMD_QUALIFY_MS
 static uint32_t tImdHigh = 0;
+
+// IMD UART link (information only). USART1: Uart(RX, TX) is the STM32 core's concrete serial class.
+static Uart imdSerial(PB7, PB6);
+static struct {
+  imdproto::Frame f;        // last valid frame
+  uint32_t lastMs = 0;      // when it arrived
+  bool any = false;         // at least one valid frame since power-up
+  uint32_t frames = 0, bad = 0;
+} imdLink;
+static bool imdFwdLog = false;   // also echo the IMD's '#' status lines to this console
 
 // ---------------- Settings storage ----------------
 static uint32_t crc32(const uint8_t *p, size_t n) {
@@ -438,6 +452,17 @@ static void printHelp() {
   Serial.println(F("  defaults                   reset both to unconfigured (not saved)"));
   Serial.println(F("  imd <required|optional>    refuse to close unless IMD_OK (default optional)"));
   Serial.println(F("  log <on|off>               500 ms status line"));
+  Serial.println(F("  imd                        IMD_OK and the IMD's last status frame"));
+  Serial.println(F("  imd send <text>            pass a command to the IMD (e.g. imd send CAL)"));
+  Serial.println(F("  imd log <on|off>           also show the IMD's own status lines"));
+}
+
+static bool imdLinkFresh(uint32_t now) { return imdLink.any && now - imdLink.lastMs < IMD_LINK_MS; }
+
+static void printKohm(uint32_t v) {
+  if (v == imdproto::kNoValue) Serial.print('-');
+  else if (v == imdproto::kOpen) Serial.print(F("INF"));
+  else { Serial.print(v); Serial.print('k'); }
 }
 
 static void printImd() {
@@ -445,6 +470,65 @@ static void printImd() {
   Serial.print(cfg.imdRequired ? F("required") : F("optional"));
   Serial.print(F(", IMD_OK="));
   Serial.println(imdOkQualified ? F("ok") : imdOkRaw ? F("qualifying") : F("low"));
+  const uint32_t now = millis();
+  Serial.print(F("imd link: "));
+  if (!imdLink.any) {
+    Serial.print(F("no frames yet"));
+  } else {
+    const imdproto::Frame &f = imdLink.f;
+    Serial.print(imdLinkFresh(now) ? F("ok") : F("LOST"));
+    Serial.print(F(" (last ")); Serial.print((now - imdLink.lastMs) / 1000); Serial.print(F(" s ago)"));
+    Serial.print(F(" mode=")); Serial.print(imdproto::modeCode(f.mode));
+    Serial.print(F(" state=")); Serial.print(imdproto::stateCode(f.state));
+    Serial.print(F(" ok=")); Serial.print(f.ok ? 1 : 0);
+    Serial.print(F(" Rp=")); printKohm(f.rpK);
+    Serial.print(F(" Rn=")); printKohm(f.rnK);
+    Serial.print(F(" Vbus=")); Serial.print(f.vbusDv / 10); Serial.print('.'); Serial.print(f.vbusDv % 10);
+    Serial.print(F(" age=")); Serial.print(f.ageS); Serial.print('s');
+    Serial.print(F(" cal=")); Serial.print((f.flags & imdproto::kCalGain) ? 'G' : '-');
+    Serial.print((f.flags & imdproto::kCalBridge) ? 'B' : '-');
+    Serial.print((f.flags & imdproto::kSystemScope) ? F(" system") : F(" pack"));
+  }
+  Serial.print(F(" | frames=")); Serial.print(imdLink.frames);
+  Serial.print(F(" bad=")); Serial.println(imdLink.bad);
+}
+
+// IMD UART: "$IMD" frames are parsed and stored; command replies are echoed with an "IMD> "
+// prefix; the IMD's '#' status lines only with "imd log on". Never acts on anything it reads.
+static void pollImd() {
+  static char buf[imdproto::kMaxLine];
+  static uint8_t len = 0;
+  static bool overflow = false;
+  while (imdSerial.available()) {
+    const char c = (char)imdSerial.read();
+    if (c == '\r' || c == '\n') {
+      if (len && !overflow) {
+        buf[len] = 0;
+        if (!strncmp(buf, "$IMD,", 5)) {
+          imdproto::Frame f;
+          if (imdproto::parse(buf, &f)) {
+            imdLink.f = f;
+            imdLink.lastMs = millis();
+            imdLink.any = true;
+            imdLink.frames++;
+          } else {
+            imdLink.bad++;
+          }
+        } else if (buf[0] != '#' || imdFwdLog) {
+          Serial.print(F("IMD> "));
+          Serial.println(buf);
+        }
+      } else if (overflow) {
+        imdLink.bad++;
+      }
+      len = 0;
+      overflow = false;
+    } else if (len < sizeof(buf) - 1) {
+      buf[len++] = c;
+    } else {
+      overflow = true;
+    }
+  }
 }
 
 static bool bothOff() { return ch[0].state == ST_OFF && ch[1].state == ST_OFF; }
@@ -480,6 +564,22 @@ static int parseChannel(const char *s) {
 }
 
 static void handleLine(char *line) {
+  // "imd send <text>": forward the rest of the line verbatim (before strtok splits it).
+  if (!strncmp(line, "imd send ", 9)) {
+    const char *text = line + 9;
+    while (*text == ' ') text++;
+    if (!*text) { Serial.println(F("Usage: imd send <text>")); return; }
+    // A CAL step stops the IMD monitoring (IMD_OK low): only with both contactors off.
+    if ((text[0] == 'C' || text[0] == 'c') && (text[1] == 'A' || text[1] == 'a') &&
+        (text[2] == 'L' || text[2] == 'l') && !bothOff()) {
+      Serial.println(F("Refused: IMD calibration only with both channels off."));
+      return;
+    }
+    imdSerial.print(text);
+    imdSerial.print(F("\r\n"));
+    return;
+  }
+
   char *cmd = strtok(line, " \t");
   if (!cmd) return;
   char *a1 = strtok(nullptr, " \t");
@@ -493,6 +593,8 @@ static void handleLine(char *line) {
     return;
   }
   if (!strcmp(cmd, "log")) { logOn = a1 && !strcmp(a1, "on"); return; }
+  if (!strcmp(cmd, "imd") && !a1) { printImd(); return; }
+  if (!strcmp(cmd, "imd") && !strcmp(a1, "log")) { imdFwdLog = a2 && !strcmp(a2, "on"); return; }
 
   // Everything below changes settings.
   if (!bothOff()) { Serial.println(F("Refused: remove both VCU commands first.")); return; }
@@ -512,7 +614,7 @@ static void handleLine(char *line) {
   if (!strcmp(cmd, "imd")) {
     if (a1 && !strcmp(a1, "required"))      cfg.imdRequired = 1;
     else if (a1 && !strcmp(a1, "optional")) cfg.imdRequired = 0;
-    else { Serial.println(F("Usage: imd <required|optional>")); return; }
+    else { Serial.println(F("Usage: imd | imd <required|optional> | imd send <text> | imd log <on|off>")); return; }
     printImd();
     return;
   }
@@ -591,7 +693,8 @@ void setup() {
   pwmTicks = pwmTim->getOverflow(TICK_FORMAT);
 
   Serial.begin(115200);
-  Serial.println(F("Contactor economizer v3 (board rev B). Type 'help'."));
+  imdSerial.begin(115200);
+  Serial.println(F("Contactor economizer v3.1 (board rev B). Type 'help'."));
   loadSettings();
   printProfile(0);
   printProfile(1);
@@ -605,6 +708,7 @@ void loop() {
   static uint32_t lastLog = 0;
 
   pollSerial();
+  pollImd();
 
   uint32_t nowUs = micros();
   if (nowUs - lastUs < 1000) return;   // 1 kHz control loop
@@ -636,6 +740,14 @@ void loop() {
     Serial.print(F(" | IMD="));
     Serial.print(imdOkQualified ? F("ok") : imdOkRaw ? F("qual") : F("low"));
     Serial.print(cfg.imdRequired ? F(" req") : F(" opt"));
+    if (imdLinkFresh(now)) {
+      Serial.print(' '); Serial.print(imdproto::modeCode(imdLink.f.mode));
+      Serial.print(F(" Rp=")); printKohm(imdLink.f.rpK);
+      Serial.print(F(" Rn=")); printKohm(imdLink.f.rnK);
+      if (imdLink.f.state != imdproto::State::Ok) { Serial.print(' '); Serial.print(imdproto::stateCode(imdLink.f.state)); }
+    } else {
+      Serial.print(imdLink.any ? F(" link=LOST") : F(" link=-"));
+    }
     Serial.println();
   }
 }
