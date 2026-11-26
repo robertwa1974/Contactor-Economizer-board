@@ -9,7 +9,7 @@ erc.rpt
 econ.net
 __pycache__/
 hw/econ.dsn
-hw/econ_placed.kicad_pcb
+hw/econ_placed.kicad_p*
 hw/drc.rpt
 hw/fab/gerbers/
 freerouting*.jar

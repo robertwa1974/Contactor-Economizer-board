@@ -9,7 +9,9 @@ Floorplan (mm, origin top-left, board 76 x 66):
   Channel 1 power stage in the upper-left, its small-signal parts in a grid below; channel 2 is the mirror image.
 """
 import json
+import math
 import os
+import shutil
 import sys
 
 import pcbnew
@@ -403,8 +405,38 @@ def stitch(board, gnd, zones, pitch=3.0, r_check=0.36):
     return added
 
 
+def hole_keepouts(board, radius=4.0, segs=32):
+    """No copper (tracks, vias, pours) under M3 screw heads / washers (7 mm OD) on either side."""
+    layers = pcbnew.LSET()
+    layers.AddLayer(pcbnew.F_Cu)
+    layers.AddLayer(pcbnew.B_Cu)
+    for fp in board.GetFootprints():
+        if not fp.GetReference().startswith("H"):
+            continue
+        c = fp.GetPosition()
+        z = pcbnew.ZONE(board)
+        z.SetIsRuleArea(True)
+        z.SetLayerSet(layers)
+        z.SetDoNotAllowZoneFills(True)
+        z.SetDoNotAllowTracks(True)
+        z.SetDoNotAllowVias(True)
+        z.SetDoNotAllowPads(False)
+        z.SetDoNotAllowFootprints(False)
+        z.SetZoneName("keepout " + fp.GetReference())
+        o = z.Outline()
+        o.NewOutline()
+        for i in range(segs):
+            a = 2 * math.pi * i / segs
+            o.Append(c.x + int(mm(radius) * math.cos(a)), c.y + int(mm(radius) * math.sin(a)))
+        board.Add(z)
+
+
 def finish():
+    # LoadBoard reads rules/netclasses from the .kicad_pro beside the board, and SaveBoard writes
+    # them to econ.kicad_pro. Without a copy beside econ_placed, KiCad defaults would overwrite them.
+    shutil.copyfile(os.path.join(HERE, "econ.kicad_pro"), PLACED.replace(".kicad_pcb", ".kicad_pro"))
     board = pcbnew.LoadBoard(PLACED)
+    hole_keepouts(board)
     ses = os.path.join(HERE, "econ.ses")
     if os.path.exists(ses):
         print("SES import", pcbnew.ImportSpecctraSES(board, ses))

@@ -88,6 +88,20 @@ Layout decisions:
 - Kelvin shunt sense nets (ISP_x/ISN_x) are separate nets from the current path by construction.
 - 12 x 0.3 mm thermal vias per TPS1H100 exposed pad; ~150 GND stitching vias. Bottom pour ~85% of the board.
 - Drills >= 0.3 mm, track >= 0.15 mm, clearance >= 0.2 mm: inside JLCPCB standard 2-layer rules.
+- No copper within 4 mm of each M3 hole centre, both layers (screw head / 7 mm washer cannot bite into GND).
+
+External review (Gemini, 2026-11-25), checked against design.py and the board:
+- Acted on: mounting-hole copper keep-outs (above).
+- Not real: "COIL_SENSE divider inverted" (no such nets exist); "INA240 clips at 5.5 A" (the 10k/20k
+  divider gives 0.4 V/A at the ADC, full scale 8.25 A, and caps the pin at 3.3 V); missing HS_ST
+  pull-ups / CMD_SENSE pull-downs (both fitted: 10k); duplicate C10 (C18's text at low resolution; refs
+  are unique, DRC parity clean); silkscreen overlaps (DRC clean; the doubled labels are F.Fab text).
+- Judged unnecessary for the GV200 (2.5 A pick-up, 0.30 A hold): SS56 instead of SS36 (freewheel loss
+  ~0.1 W at hold); wider coil copper (0.8 mm is fine for 2.5 A pulses); extra ceramics at D1/Q1 (0.3 A
+  commutating, estimated ringing well under 1 V).
+- Limit to keep in mind: CL = 390 ohm gives 5.4 A minimum current limit, so pick-up setpoints above ~5 A
+  will hit the TPS1H100's limit (then ST faults). Lower R14/R29 (e.g. 300 ohm, 7.1 A min) only if a
+  heavier contactor is ever used; the shunt (1 W) and SS36 would also need a look then.
 
 Before ordering (open):
 - [ ] Rob: open in KiCad, review the power routing (autorouted). Hand-tuning that would help: shorten
