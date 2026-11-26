@@ -147,6 +147,34 @@ def kelvin_2512():
         f.write(dump(fp) + "\n")
 
 
+def edge_headers(cut_x=4.5):
+    """Right-angle 1x3/1x5 headers whose pins overhang the board edge (rev B, J2/J3).
+
+    Copies of the KiCad library footprints with the silkscreen over the overhanging pins removed
+    (local +x points off the board), so silkscreen never runs past the board edge.
+    """
+    from sexpr import parse
+    src = r"C:\Program Files\KiCad\10.0\share\kicad\footprints\Connector_PinHeader_2.54mm.pretty"
+    for n in (3, 5):
+        name = f"PinHeader_1x{n:02d}_P2.54mm_Horizontal"
+        with open(os.path.join(src, name + ".kicad_mod"), encoding="utf-8") as f:
+            fp = parse(f.read())
+
+        def beyond(item):
+            if not (isinstance(item, list) and item and str(item[0]) in ("fp_line", "fp_rect", "fp_poly")):
+                return False
+            layer = [x for x in item if isinstance(x, list) and str(x[0]) == "layer"]
+            if not layer or layer[0][1] != "F.SilkS":
+                return False
+            xs = [float(x[1]) for x in item if isinstance(x, list) and str(x[0]) in ("start", "end")]
+            return any(x > cut_x for x in xs)
+
+        fp = [x for x in fp if not beyond(x)]
+        fp[1] = name + "_Edge"
+        with open(os.path.join(HERE, "econ.pretty", name + "_Edge.kicad_mod"), "w", encoding="utf-8") as f:
+            f.write(dump(fp) + "\n")
+
+
 def write_lib_tables():
     with open(os.path.join(HERE, "sym-lib-table"), "w") as f:
         f.write('(sym_lib_table\n  (version 7)\n  (lib (name "econ")(type "KiCad")(uri "${KIPRJMOD}/econ.kicad_sym")(options "")(descr "Contactor economizer parts"))\n)\n')
@@ -157,5 +185,6 @@ def write_lib_tables():
 if __name__ == "__main__":
     write_symbols()
     kelvin_2512()
+    edge_headers()
     write_lib_tables()
-    print("wrote econ.kicad_sym, econ.pretty/R_2512_Kelvin.kicad_mod, lib tables")
+    print("wrote econ.kicad_sym, econ.pretty (Kelvin shunt, edge headers), lib tables")

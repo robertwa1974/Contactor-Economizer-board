@@ -9,7 +9,7 @@ current-regulated pulse and then holds it at a much lower current. For a Gigavac
 
 ![Board, top side](hw/fab/econ_3d_top.png)
 
-**Status:** revision A. The design is complete and the files are ready for JLCPCB, but no board has
+**Status:** revision B. The design is complete and the files are ready for JLCPCB, but no board has
 been built or tested yet.
 
 ## Documentation
@@ -31,6 +31,8 @@ been built or tested yet.
 - Fast release from a hardware clamp, reverse-polarity protection, and an open-drain status output per
   channel.
 - STM32G031 microcontroller, TI TPS1H100-Q1 smart high-side switches, and INA240 current sensing.
+- Optional stacking socket for an insulation monitor (IMD) board. The IMD can block a contactor from
+  closing but never forces one open. Without an IMD, the board works stand-alone.
 - 76 × 66 mm, 2-layer board.
 
 ## Repository layout

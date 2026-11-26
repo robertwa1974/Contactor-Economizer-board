@@ -20,8 +20,8 @@
     (layer_rule B.Cu
       (active on)
       (preferred_direction vertical)
-      (preferred_direction_trace_costs 4.0)
-      (against_preferred_direction_trace_costs 8.0)
+      (preferred_direction_trace_costs 3.0)
+      (against_preferred_direction_trace_costs 6.0)
     )
   )
 )

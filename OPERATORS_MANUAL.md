@@ -1,6 +1,6 @@
 # Contactor Economizer: Operator's Manual
 
-Board revision A, firmware v2.
+Board revision B, firmware v3.
 
 This board drives the coils of two high-voltage contactors from a 12 V vehicle supply. When the vehicle
 controller (VCU) commands a contactor closed, the board pulls it in with a strong, current-regulated
@@ -16,6 +16,9 @@ Safety comes from the hardware, not the firmware:
 - Release speed is set by a clamp diode on the board, so contactors open quickly with no help from the
   firmware.
 
+Revision B adds an optional stacking socket for an insulation monitor (IMD) board mounted above
+this one. Without an IMD, the board works exactly as before (see section 8).
+
 > **High voltage warning.** Do every bench test in this manual with the contactor's main studs
 > disconnected from the traction pack. Only connect HV once the board has passed the bench test in
 > section 6.
@@ -26,21 +29,27 @@ Safety comes from the hardware, not the firmware:
 
 ### Parts not fitted by the factory
 
-JLCPCB assembles all the surface-mount parts. Fit these three through-hole connectors yourself:
+JLCPCB assembles all the surface-mount parts. Fit these through-hole connectors yourself:
 
 | Ref | Part | Source |
 |---|---|---|
-| J1 | Molex Micro-Fit 3.0, 2×6, right angle, **43045-1200** | Digi-Key / Mouser |
-| J2 | 1×5 male pin header, 2.54 mm, vertical (SWD programming) | any header strip |
-| J3 | 1×3 male pin header, 2.54 mm, vertical (serial setup) | any header strip |
+| J1 | Molex Micro-Fit 3.0, 2×7, right angle, **43045-1400** | Digi-Key / Mouser |
+| J2 | 1×5 male pin header, 2.54 mm, **right angle** (SWD programming) | any header strip |
+| J3 | 1×3 male pin header, 2.54 mm, **right angle** (serial setup) | any header strip |
+| J4 | 2×6 female socket, 2.54 mm, vertical, 8.5 mm tall (IMD stacking socket). **Only needed with an IMD board.** | any |
 
 For the harness:
 
-- Mating plug: Molex Micro-Fit 3.0 **43025-1200** receptacle housing.
+- Mating plug: Molex Micro-Fit 3.0 **43025-1400** receptacle housing.
 - Crimp terminals: Micro-Fit 3.0 female crimp terminals (43030 series) to suit your wire.
   Use 18–20 AWG for +12 V, GND and the coil wires.
 - A 5 A fuse and holder for the +12 V feed.
-- Four M3 screws and standoffs for mounting.
+- Four M3 screws and standoffs for mounting the board.
+
+For stacking an IMD board (section 8):
+
+- Four **nylon** M3 × 15 mm hex standoffs, male–female.
+- Four nylon M3 × 6 mm screws.
 
 ### Tools
 
@@ -67,21 +76,33 @@ Fit the parts on the **top** side, the side with the components, and solder them
 2. Push J1 down until the pegs click home and the body sits flat on the board.
 3. Turn the board over. Solder **one corner pin only**, then check that J1 is still flat and square to
    the board edge. If it isn't, reheat that pin and adjust.
-4. Solder the other 11 pins.
-   - Pins 4 and 10 (GND) connect to the large ground plane and need more heat. Use a hotter iron
+4. Solder the other 13 pins.
+   - Pins 5 and 12 (GND) connect to the large ground plane and need more heat. Use a hotter iron
      (around 370 °C) or hold it longer, until the solder flows into the hole and forms a cone.
-5. Check every joint: a smooth cone on all 12 pins and no bridges between them.
+5. Check every joint: a smooth cone on all 14 pins and no bridges between them.
 
 ### J2 (SWD, 5 pins) and J3 (serial, 3 pins)
 
-1. Break a 5-pin and a 3-pin length off a 2.54 mm header strip.
-2. Fit each one with the **short** pins through the board from the top, leaving the long pins standing
-   up.
-3. Solder one pin, check the header is upright, then solder the rest.
+Both are right-angle headers, so you can reach them with an IMD board stacked on top.
+
+1. Break a 5-pin and a 3-pin length off a 2.54 mm right-angle header strip.
+2. Fit each one from the top with the plastic body lying flat on the board and the long pins
+   pointing **off the bottom edge**.
+3. Solder one pin, check the header is flat and square, then solder the rest.
    - The GND pins (J2 pin 5, J3 pin 3) need a little extra heat.
-4. Pin 1 of each header is the square pad. The silkscreen labels below them read:
-   - J2: `SWD 3V3 IO CK RST GND` (pins 1 to 5)
-   - J3: `UART TX RX GND` (pins 1 to 3)
+4. Pin 1 of each header is the square pad, at the **right-hand** end. The silkscreen labels above
+   them read, left to right:
+   - J2: `SWD GND RST CK IO 3V3` (pins 5 to 1)
+   - J3: `UART GND RX TX` (pins 3 to 1)
+
+### J4 (IMD stacking socket, optional)
+
+Fit J4 only if you're stacking an IMD board.
+
+1. Fit the 2×6 female socket on the top side, bottom-left of the board, upright.
+2. Solder one pin, check that the socket is square and flat, then solder the rest. The GND pins
+   (2, 4, 8) need extra heat.
+3. The pinout is printed on the back of the board (section 8.2).
 
 Clean off the flux with isopropyl alcohol when you're done.
 
@@ -94,17 +115,21 @@ of the board.
 
 | Pin | Signal | Pin | Signal |
 |---|---|---|---|
-| 1 | COIL1+ (contactor 1 coil, +) | 7 | COIL1− (contactor 1 coil, −) |
-| 2 | CMD_1 (from VCU, pull low = close) | 8 | STAT_1 (to VCU, low = holding OK) |
-| 3 | +12 V in | 9 | +12 V in |
-| 4 | GND | 10 | GND |
-| 5 | CMD_2 (from VCU, pull low = close) | 11 | STAT_2 (to VCU, low = holding OK) |
-| 6 | COIL2+ (contactor 2 coil, +) | 12 | COIL2− (contactor 2 coil, −) |
+| 1 | COIL1+ (contactor 1 coil, +) | 8 | COIL1− (contactor 1 coil, −) |
+| 2 | CMD_1 (from VCU, pull low = close) | 9 | STAT_1 (to VCU, low = holding OK) |
+| 3 | +12 V in | 10 | +12 V in |
+| 4 | IMD_MHS (IMD measurement output, to VCU) | 11 | IMD_OKHS (IMD OK output, to VCU) |
+| 5 | GND | 12 | GND |
+| 6 | CMD_2 (from VCU, pull low = close) | 13 | STAT_2 (to VCU, low = holding OK) |
+| 7 | COIL2+ (contactor 2 coil, +) | 14 | COIL2− (contactor 2 coil, −) |
 
 Wiring rules:
 
-- Wire **both** +12 V pins (3 and 9) and **both** GND pins (4 and 10). Each contact is rated about
+- Wire **both** +12 V pins (3 and 10) and **both** GND pins (5 and 12). Each contact is rated about
   5 A, and both contactors can pull in at once.
+- Pins 4 and 11 are wired straight through to the IMD socket J4. They carry the IMD board's own
+  outputs (Bender IR155-style MHS and OKHS), and their electrical levels are set by the IMD board.
+  Without an IMD, leave them unconnected.
 - Fit a **5 A fuse** in the +12 V feed, close to where it is taken from the vehicle supply.
 - Run both coil wires of each contactor **only to the board**. Don't connect COIL− to chassis ground.
   The board switches the low side of the coil itself.
@@ -125,9 +150,9 @@ Wiring rules:
 
 1. **Look over the board** for solder bridges, especially on J1 and around the small chips.
 2. **Check for shorts.** With no power connected, measure resistance between J1 pin 3 (+12 V) and
-   pin 4 (GND). It should rise steadily as the input capacitor charges, not sit near 0 Ω.
+   pin 5 (GND). It should rise steadily as the input capacitor charges, not sit near 0 Ω.
 3. **Power up gently.** Set the bench supply to 12 V with a **100 mA** current limit. Connect it to
-   J1 pins 3 (+) and 4 (−).
+   J1 pins 3 (+) and 5 (−).
    - The green power LED **D5** (bottom right) should light.
    - The supply should show a few tens of mA. If it sits at the current limit, switch off and
      look for a short.
@@ -200,10 +225,11 @@ choose a contactor type and save it.
 3. Power-cycle the board (it has no reset button). You should see:
 
    ```
-   Contactor economizer v2. Type 'help'.
+   Contactor economizer v3 (board rev B). Type 'help'.
    No valid settings in flash: both channels unconfigured.
    ch1: unconfigured mode=off ...
    ch2: unconfigured mode=off ...
+   imd: optional, IMD_OK=low
    ```
 
 4. A status line prints every half second. Type `log off` so it doesn't scroll away while you type.
@@ -228,19 +254,19 @@ CMD_2 unconnected. Otherwise the board replies `Refused: remove both VCU command
 Keep the main studs disconnected from HV. Use the bench supply at 12 V with a 3 A current limit, and
 keep the serial monitor open with `log on`.
 
-1. Connect the contactor coil to J1 pins 1 (COIL1+) and 7 (COIL1−).
-2. Connect a switch or jumper wire from **pin 2 (CMD_1)** to **pin 4 (GND)**. Closing it stands in for
+1. Connect the contactor coil to J1 pins 1 (COIL1+) and 8 (COIL1−).
+2. Connect a switch or jumper wire from **pin 2 (CMD_1)** to **pin 5 (GND)**. Closing it stands in for
    the VCU commanding contactor 1 closed.
 3. Close the switch. You should see and hear:
    - A firm click as the contactor pulls in.
    - The log shows `ch1 PICKUP`, then `ch1 HOLD` after 0.2 s. For a GV200-005 it shows
      `I=0.30` (amps) and a duty `D` of roughly 10–20 %.
-   - Status LED **D9** lights. A meter on J1 pin 8 (STAT_1) reads near 0 V against GND, given a
+   - Status LED **D9** lights. A meter on J1 pin 9 (STAT_1) reads near 0 V against GND, given a
      pull-up.
    - The bench supply drops to around 0.05 A once holding.
    - The main studs show continuity on a meter.
 4. Open the switch. The contactor should drop out at once, D9 goes off and the log shows `ch1 OFF`.
-5. Repeat on channel 2: coil on pins 6 and 12, switch from **pin 5 (CMD_2)** to GND, LED **D12**.
+5. Repeat on channel 2: coil on pins 7 and 14, switch from **pin 6 (CMD_2)** to GND, LED **D12**.
 
 A quick fault check: with **no** coil connected, closing the CMD switch should give `ch1 FAULT`
 within 0.2 s, with a fault code such as `F=0x11`. Opening the switch clears it.
@@ -264,24 +290,116 @@ contactors, stay with the VCU.
 
 ---
 
-## 8. Indicators and status
+## 8. Using an insulation monitor (IMD)
+
+Rev B can carry an insulation monitor (IMD) board stacked on top, plugged into socket J4. The IMD
+board carries all the high voltage; this board stays 12 V only. Without an IMD, leave J4 unfitted and
+the IMD setting at its default (`optional`). The board then works exactly as described in the rest of
+this manual.
+
+The rule is: **an IMD fault blocks a contactor from closing. It never forces a closed contactor
+open.** The VCU decides when to open.
+
+### 8.1 Mounting
+
+- Stack the IMD board on four **nylon M3 × 15 mm** standoffs in the four corner holes, with nylon
+  screws on top. Nylon keeps the IMD board's mounting holes from bridging to this board.
+  Alternatively, the IMD board's mounting holes must sit in its low-voltage region, with HV
+  clearance.
+- The 15 mm stack clears the tallest parts on this board (C1, about 8 mm). The IMD board needs a
+  male header that reaches down into the 8.5 mm socket J4 across that gap, and a cut-out over J1 so
+  the harness plug latch can be pressed.
+- The IMD board fits only one way round: rotated, its header misses J4.
+- J2 and J3 stay reachable from the bottom edge with the IMD fitted.
+
+### 8.2 Socket J4 pinout
+
+Logic pins are 3.3 V. Each passes through a 1 kΩ resistor and an ESD clamp on this board.
+
+| Pin | Signal | Direction | Meaning |
+|---|---|---|---|
+| 1 | 12V_PROT | to IMD | +12 V after the reverse-polarity stage, through a 0.2 A resettable fuse (F1) |
+| 2, 4, 8 | GND | — | Ground |
+| 3 | IMD_OK | from IMD | High = insulation OK. 100 kΩ pull-down here: a missing or dead IMD reads "not OK". |
+| 5 | CONT1_CLOSED | to IMD | Channel 1 coil energised (see below) |
+| 6 | CONT2_CLOSED | to IMD | Channel 2 coil energised |
+| 7 | IMD_INHIBIT | to IMD | High = ask the IMD to stop measuring. Reserved: firmware v3 holds it low. |
+| 9 | IMD_TX | to IMD | Reserved UART (this board's TX, to the IMD's RX). Not used by firmware v3. |
+| 10 | IMD_RX | from IMD | Reserved UART (the IMD's TX) |
+| 11 | IMD_MHS | from IMD | Passed straight to J1 pin 4 |
+| 12 | IMD_OKHS | from IMD | Passed straight to J1 pin 11 |
+
+**CONT1_CLOSED / CONT2_CLOSED** mean "this channel's coil is energised at 60 % or more of its hold
+current" (or, in pass-through, carrying current). They're set 20 ms after that condition starts and
+cleared 20 ms after it ends. They are **not** proof that the main contacts have closed: a welded or
+mechanically stuck contactor reads the same.
+
+Channel mapping: channel 1 is whichever contactor is wired to J1 pins 1/8, channel 2 is pins 7/14.
+**For the truck: channel 1 = positive main contactor, channel 2 = negative main.** Record your own
+mapping if it differs.
+
+### 8.3 Power for the IMD
+
+- The IMD draws from 12V_PROT through the 0.2 A resettable fuse F1 (Bourns MF-MSMF020/60). Keep the
+  IMD board under about **1 W** (about 0.11 A at 9 V). The fuse's hold current falls as it warms, to
+  roughly 0.15 A in a hot enclosure.
+- A short on the IMD board trips F1 in milliseconds, before the 5 A harness fuse can blow. The coils
+  and this board keep running.
+- F1's resistance is at most 6 Ω, so the IMD sees at least about 8.3 V when the vehicle supply is at
+  9 V.
+- **With `imd required`, feed this board (and so the IMD) from the same permanent 12 V supply as the
+  VCU, not a key-switched one.** The IMD then has its 2 s start-up qualification done before the VCU
+  asks for the contactors at key-on.
+
+### 8.4 Turning IMD checking on
+
+```
+imd required
+save
+```
+
+`imd optional` turns it off again. The setting is saved with the contactor settings and defaults to
+`optional`, so a board without an IMD is never blocked.
+
+With `imd required`:
+
+- IMD_OK only counts as OK once it has been high continuously for **2 s**. This rides through the
+  IMD's start-up.
+- **Close refused:** if the VCU asks a channel to close while IMD_OK isn't OK, the channel stays open
+  and goes to FAULT with code **0x40**. Both its switches are held off. The fault stays latched until
+  the VCU removes the command, so the contactor never closes late, out of sequence. The VCU has to
+  ask again.
+- What the VCU sees for a refused close: STAT stays released (floating), the same as any other fault.
+  The channel LED stays off and the serial log shows `FAULT ... F=0x40`. STAT can't say *why*; the
+  VCU can read the reason directly from IMD_OKHS on J1 pin 11.
+- **IMD_OK lost while closed:** the contactor stays closed. After 20 ms of IMD_OK low, the log shows
+  `W=IMD_LOST` for that channel until the command is removed. STAT and the LED are not affected.
+  The IMD's own OKHS output tells the VCU.
+
+---
+
+## 9. Indicators and status
 
 | Indicator | Meaning |
 |---|---|
 | D5 (green, bottom right) | 12 V present, 3.3 V rail up |
 | D9 (channel 1), D12 (channel 2) | Lit = holding (or pass-through) with no fault |
-| STAT_1 / STAT_2 (J1 pins 8 / 11) | Pulled low = holding with no fault; floating = off, picking up, or fault |
+| STAT_1 / STAT_2 (J1 pins 9 / 13) | Pulled low = holding with no fault; floating = off, picking up, or fault |
 
 ### Serial status line
 
 ```
-Vbat=12.84 | ch1 HOLD I=0.301 D=12.6% F=0x0 | ch2 OFF I=0.000 D=0.0% F=0x0
+Vbat=12.84 | ch1 HOLD I=0.301 D=12.6% F=0x0 CLOSED | ch2 OFF I=0.000 D=0.0% F=0x0 | IMD=ok req
 ```
 
 - `Vbat`: supply voltage after the reverse-polarity stage.
 - `I`: coil current in amps.
 - `D`: switching duty.
 - `F`: fault code (below).
+- `CLOSED`: the channel's CONTx_CLOSED output is high (section 8.2).
+- `W=IMD_LOST`: IMD_OK dropped while this channel was closed (warning only).
+- `IMD=`: `ok` (high for 2 s or more), `qual` (high, still qualifying) or `low`, then `req` or `opt`
+  for the `imd` setting.
 
 | State | Meaning |
 |---|---|
@@ -303,20 +421,22 @@ Vbat=12.84 | ch1 HOLD I=0.301 D=12.6% F=0x0 | ch2 OFF I=0.000 D=0.0% F=0x0
 | 0x08 | Hold high: current far above the hold setting for 0.5 s | Reported, keeps holding | Low-side switch failed on |
 | 0x10 | High-side switch fault (open load, short, or over-temperature) | Reported | Coil disconnected, short to ground, overheating |
 | 0x20 | Not configured: the VCU commanded a channel with no contactor type saved | Channel stays off | Do section 5.3 |
+| 0x40 | IMD inhibit: close refused because IMD checking is on and IMD_OK wasn't OK | Channel stays off, both switches held off | Insulation fault, IMD not running or still starting (under 2 s), IMD unplugged |
 
 Any fault turns the channel's LED off and releases its STAT output, so the VCU can see it. Every
 fault clears when the VCU removes the command.
 
 ---
 
-## 9. Serial commands
+## 10. Serial commands
 
-The settings commands (`preset`, `set`, `save`, `defaults`) work only while both channels are off.
+The settings commands (`preset`, `set`, `imd`, `save`, `defaults`) work only while both channels are
+off.
 
 | Command | Does |
 |---|---|
 | `help` | List the commands |
-| `show` | Show both channels' settings |
+| `show` | Show both channels' settings, plus the IMD setting and state |
 | `presets` | List the built-in contactor types |
 | `preset <1\|2> <name>` | Load a built-in type into channel 1 or 2 |
 | `set <1\|2> mode <off\|econ\|pass>` | Off, economize, or pass-through (plain 12 V) |
@@ -326,7 +446,8 @@ The settings commands (`preset`, `set`, `save`, `defaults`) work only while both
 | `set <1\|2> ohms <Ω>` | Coil resistance as measured, 0.5–100 Ω |
 | `set <1\|2> oc <A>` | Overcurrent trip, 0 = automatic, maximum 6.5 A |
 | `save` | Store the settings in flash. Nothing changes permanently without this. |
-| `defaults` | Reset both channels to unconfigured (not saved until `save`) |
+| `imd <required\|optional>` | Refuse to close unless the IMD reports OK (section 8.4). Default `optional`. |
+| `defaults` | Reset both channels to unconfigured and IMD checking to optional (not saved until `save`) |
 | `log <on\|off>` | Status line every 0.5 s |
 
 ### Built-in contactor types
@@ -356,23 +477,25 @@ release (about −21 V for under 1 ms).
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 | Symptom | Check |
 |---|---|
-| D5 not lit | 12 V at J1 pins 3/9 and GND at 4/10; fuse; polarity |
+| D5 not lit | 12 V at J1 pins 3/10 and GND at 5/12; fuse; polarity |
 | Upload fails to connect | ST-Link wiring, board powered, try STM32CubeProgrammer "Under reset" (section 5.2) |
 | Nothing in the serial monitor | TX/RX crossed over? Adapter at 3.3 V? 115200 baud? Correct COM port? |
 | `Refused: remove both VCU commands first.` | A CMD line is being pulled low. Disconnect CMD_1/CMD_2 or turn off the VCU outputs. |
 | Channel goes straight to FAULT 0x20 | No contactor type saved (section 5.3) |
 | FAULT 0x01 every time | Coil wiring; on the bench, the supply current limit is too low for pick-up (needs at least 3 A) |
 | FAULT 0x02 | Coil or harness short; pick-up set higher than the coil needs |
+| FAULT 0x40 | IMD checking is on and IMD_OK wasn't OK for 2 s before the close. Check the IMD and J4, and the `imd` setting (`show`). Without an IMD, `imd optional` then `save`. |
+| IMD board dead, F1 warm | F1 has tripped: a short or overload on the IMD board. Remove power and fix it; F1 resets as it cools. |
 | Contactor chatters or drops out in hold | Hold current too low for that contactor; raise `hold` |
 | Contactor slow to open | A diode fitted across the coil? Remove it. |
 
 ---
 
-## 11. Ratings and limits
+## 12. Ratings and limits
 
 | Item | Value |
 |---|---|
@@ -386,5 +509,6 @@ release (about −21 V for under 1 ms).
 | Release clamp | About 31–34 V across the switch, for fast opening |
 | Switching frequency | 20 kHz |
 | Board size | 76 × 66 mm, four M3 holes on a 69 × 59 mm grid |
-| Connector | Molex Micro-Fit 3.0, 12 pins (43045-1200, mates with 43025-1200) |
+| Connector | Molex Micro-Fit 3.0, 14 pins (43045-1400, mates with 43025-1400) |
+| IMD socket | 2×6 female, 2.54 mm; 12V_PROT fused at 0.2 A; logic 3.3 V |
 | Serial port | 3.3 V logic, 115200 baud, 8N1 |

@@ -13,7 +13,7 @@ import design
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "fab")
 GERB = os.path.join(OUT, "gerbers")
-HAND = {"J1", "J2", "J3"}   # through-hole: hand-soldered, kept out of the CPL
+HAND = {"J1", "J2", "J3", "J4"}   # through-hole: hand-soldered, kept out of the CPL
 CLI = r"C:\Program Files\KiCad\10.0\bin\kicad-cli.exe"
 PCB = os.path.join(HERE, "econ.kicad_pcb")
 

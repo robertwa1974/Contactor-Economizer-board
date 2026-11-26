@@ -1,5 +1,5 @@
 // Contactor economizer - two channels, STM32G031K8 (STM32duino / PlatformIO)
-// v2: general-purpose. Pick-up AND hold are current-regulated, so the peak coil
+// v3: rev B board (IMD interface). v2: general-purpose. Pick-up AND hold are current-regulated, so the peak coil
 // current is the pick-up setting, not battery voltage / coil resistance.
 // Per-channel profiles live in flash and are set over the USB serial port.
 //
@@ -8,7 +8,10 @@
 //    never turn a high-side switch on; it can only force it off (KILL pin).
 //  - If this MCU is dead or in reset, PWM pins are low, so no coil current can flow
 //    and the contactors stay open.
-//  - Release speed is set by hardware (bidirectional TVS on COIL+), not firmware.
+//  - Release speed is set by hardware (TVS across the high-side switch), not firmware.
+//  - Optional IMD (rev B): with "imd required", a close is refused unless IMD_OK has
+//    been high for 2 s. Losing IMD_OK while closed is only a warning: the IMD never
+//    forces an open; the VCU decides.
 //  - Settings can only be changed or saved while both channels are OFF.
 //  - Factory default is "unconfigured": a channel will not energize until a
 //    profile is chosen and saved.
@@ -44,6 +47,13 @@ static const uint32_t CMD_ON_DEBOUNCE_MS = 5;
 static const uint32_t HS_ST_BLANK_MS  = 20;
 static const uint32_t HS_ST_PERSIST_MS = 10;
 static const float    VBAT_MIN_FF     = 8.0f;
+// IMD (insulation monitor) interface, rev B. IMD_OK must be high this long before
+// it counts as OK, so a close during IMD start-up is refused rather than raced.
+static const uint32_t IMD_QUALIFY_MS  = 2000;
+static const uint32_t IMD_LOST_MS     = 20;     // IMD_OK low this long while closed = warning
+// CONTx_CLOSED: coil energised in HOLD/PASS at >= this fraction of hold current.
+static const float    CLOSED_FRAC     = 0.60f;
+static const uint32_t CLOSED_DEBOUNCE_MS = 20;
 
 // ---------------- Hardware scaling ----------------
 static const float ADC_VREF   = 3.3f;
@@ -56,14 +66,19 @@ static const float VBAT_V_PER_V   = 15.0f / 115.0f;
 // ---------------- Pins ----------------
 static const uint32_t PIN_VBAT = PA4;
 static const uint32_t PWM_HZ   = 20000;
+// IMD stacking socket (J4). PB6/PB7 are reserved for USART1 to the IMD (no code yet;
+// left in their reset state).
+static const uint32_t PIN_IMD_OK      = PA15;  // input, 100k pull-down: high = insulation OK
+static const uint32_t PIN_IMD_INHIBIT = PB3;   // output, high = ask the IMD to pause measuring
 
 struct ChannelPins {
-  uint32_t isense, pwm, timCh, cmd, kill, hsStatus, status;
+  uint32_t isense, pwm, timCh, cmd, kill, hsStatus, status, closed;
 };
 static const ChannelPins PINS[2] = {
-  { PA0, PA6, 1, PB0, PB4, PB6, PA11 },
+  // HS_ST on PB8/PB9 since rev B (polled; was PB6/PB7).
+  { PA0, PA6, 1, PB0, PB4, PB8, PA11, PA8 },
   // PA7's first PinMap_TIM entry is TIM1_CH1N; PA7_ALT1 selects TIM3_CH2 (AF1).
-  { PA1, PA7_ALT1, 2, PB1, PB5, PB7, PA12 },
+  { PA1, PA7_ALT1, 2, PB1, PB5, PB9, PA12, PC6 },
 };
 
 // ---------------- Profiles ----------------
@@ -105,17 +120,20 @@ struct Settings {
   uint32_t magic;
   uint16_t version;
   Profile  ch[2];
+  uint8_t  imdRequired;   // 1 = refuse to close unless IMD_OK has been high for 2 s
+  uint8_t  reserved[3];
   uint32_t crc;
 };
 static const uint32_t SETTINGS_MAGIC   = 0x45434F4E;  // "ECON"
-static const uint16_t SETTINGS_VERSION = 2;
+static const uint16_t SETTINGS_VERSION = 3;          // v3: imdRequired added
 static Settings cfg;
 
 // ---------------- Runtime state ----------------
 enum State : uint8_t { ST_OFF, ST_PICKUP, ST_HOLD, ST_PASS, ST_FAULT };
 enum Fault : uint8_t {
   F_NONE = 0, F_PICKUP_LOW = 1, F_OVERCURRENT = 2, F_HOLD_LOW = 4,
-  F_HOLD_HIGH = 8, F_HS_SWITCH = 16, F_NOT_CONFIGURED = 32
+  F_HOLD_HIGH = 8, F_HS_SWITCH = 16, F_NOT_CONFIGURED = 32,
+  F_IMD_INHIBIT = 64    // close refused: IMD required and IMD_OK not qualified
 };
 
 struct Channel {
@@ -126,6 +144,12 @@ struct Channel {
   float    integ = 0.0f, duty = 0.0f, amps = 0.0f;
   uint32_t tOverStart = 0, tLowStart = 0, tHighStart = 0, tStStart = 0, tEnergised = 0;
   bool     overActive = false, lowActive = false, highActive = false, stActive = false;
+  // Warning (not a fault): IMD_OK dropped while this channel was energised. Cleared at OFF.
+  bool     imdWarn = false, imdLostActive = false;
+  uint32_t tImdLostStart = 0;
+  // Debounced CONTx_CLOSED output.
+  bool     closed = false;
+  uint32_t tClosedChange = 0;
 };
 
 static Channel ch[2];
@@ -133,6 +157,9 @@ static HardwareTimer *pwmTim = nullptr;
 static uint32_t pwmTicks = 0;
 static float vbat = 12.0f;
 static bool logOn = true;
+static bool imdOkRaw = false;          // IMD_OK pin level this cycle
+static bool imdOkQualified = false;    // high continuously for IMD_QUALIFY_MS
+static uint32_t tImdHigh = 0;
 
 // ---------------- Settings storage ----------------
 static uint32_t crc32(const uint8_t *p, size_t n) {
@@ -154,6 +181,7 @@ static void loadDefaults() {
   cfg.version = SETTINGS_VERSION;
   cfg.ch[0] = PRESETS[0];
   cfg.ch[1] = PRESETS[0];
+  cfg.imdRequired = 0;     // stand-alone builds (no IMD) must not be blocked by the pull-down
   cfg.crc = settingsCrc(cfg);
 }
 
@@ -227,6 +255,8 @@ static void enterState(uint8_t n, State s, uint32_t now) {
       setDuty(n, 0.0f);
       digitalWrite(PINS[n].kill, LOW);
       c.faults = F_NONE;            // command removed: clear latched faults
+      c.imdWarn = false;
+      c.imdLostActive = false;
       break;
     case ST_PICKUP:
     case ST_PASS:
@@ -264,6 +294,20 @@ static float regulate(uint8_t n, float target, float ohms, float dt, float dutyM
   return d;
 }
 
+// CONTx_CLOSED to the IMD: coil energised (HOLD or PASS) at >= 60 % of hold current
+// (pass-through: above the open-coil threshold), debounced both ways. This is
+// "coil energised", not proof that the main contacts have closed.
+static void updateClosed(uint8_t n, uint32_t now) {
+  Channel &c = ch[n];
+  const Profile &pr = cfg.ch[n];
+  bool want = false;
+  if (c.state == ST_HOLD) want = c.amps >= CLOSED_FRAC * pr.holdA;
+  else if (c.state == ST_PASS) want = c.amps >= PASS_MIN_A;
+  if (want == c.closed) { c.tClosedChange = now; }
+  else if (now - c.tClosedChange >= CLOSED_DEBOUNCE_MS) { c.closed = want; c.tClosedChange = now; }
+  digitalWrite(PINS[n].closed, c.closed ? HIGH : LOW);
+}
+
 static void runChannel(uint8_t n, uint32_t now, float dt) {
   Channel &c = ch[n];
   const ChannelPins &p = PINS[n];
@@ -276,6 +320,7 @@ static void runChannel(uint8_t n, uint32_t now, float dt) {
     c.cmdSeen = false;
     if (c.state != ST_OFF) enterState(n, ST_OFF, now);
     digitalWrite(p.status, LOW);
+    updateClosed(n, now);
     return;
   }
 
@@ -299,8 +344,15 @@ static void runChannel(uint8_t n, uint32_t now, float dt) {
   switch (c.state) {
     case ST_OFF:
       if (!cmdStable) break;
-      if (pr.mode == MODE_ECON && validate(pr) == nullptr) enterState(n, ST_PICKUP, now);
-      else if (pr.mode == MODE_PASS)                       enterState(n, ST_PASS, now);
+      if (cfg.imdRequired && !imdOkQualified) {
+        // IMD blocks a CLOSE (never forces an open). Keep both switches off and
+        // latch until the VCU drops the command: no late, unsequenced close.
+        c.faults |= F_IMD_INHIBIT;
+        digitalWrite(p.kill, HIGH);
+        enterState(n, ST_FAULT, now);
+      }
+      else if (pr.mode == MODE_ECON && validate(pr) == nullptr) enterState(n, ST_PICKUP, now);
+      else if (pr.mode == MODE_PASS)                            enterState(n, ST_PASS, now);
       else { c.faults |= F_NOT_CONFIGURED; enterState(n, ST_FAULT, now); }
       break;
 
@@ -338,8 +390,16 @@ static void runChannel(uint8_t n, uint32_t now, float dt) {
       break;
   }
 
+  // IMD_OK lost while energised: warn only. The VCU decides when to open.
+  if (cfg.imdRequired && (c.state == ST_PICKUP || c.state == ST_HOLD || c.state == ST_PASS)) {
+    if (persisted(!imdOkRaw, c.imdLostActive, c.tImdLostStart, now, IMD_LOST_MS)) c.imdWarn = true;
+  }
+
+  // STAT/LED: holding with no fault. Warnings (imdWarn) do not affect it; a refused
+  // close (F_IMD_INHIBIT) is a FAULT, so STAT stays released and the LED stays off.
   bool ok = (c.state == ST_HOLD || c.state == ST_PASS) && (c.faults == F_NONE);
   digitalWrite(p.status, ok ? HIGH : LOW);
+  updateClosed(n, now);
 }
 
 // ---------------- Serial command line ----------------
@@ -376,7 +436,15 @@ static void printHelp() {
   Serial.println(F("  set <1|2> oc <A>           overcurrent trip, 0 = auto"));
   Serial.println(F("  save                       write profiles to flash"));
   Serial.println(F("  defaults                   reset both to unconfigured (not saved)"));
+  Serial.println(F("  imd <required|optional>    refuse to close unless IMD_OK (default optional)"));
   Serial.println(F("  log <on|off>               500 ms status line"));
+}
+
+static void printImd() {
+  Serial.print(F("imd: "));
+  Serial.print(cfg.imdRequired ? F("required") : F("optional"));
+  Serial.print(F(", IMD_OK="));
+  Serial.println(imdOkQualified ? F("ok") : imdOkRaw ? F("qualifying") : F("low"));
 }
 
 static bool bothOff() { return ch[0].state == ST_OFF && ch[1].state == ST_OFF; }
@@ -419,7 +487,7 @@ static void handleLine(char *line) {
   char *a3 = strtok(nullptr, " \t");
 
   if (!strcmp(cmd, "help") || !strcmp(cmd, "?")) { printHelp(); return; }
-  if (!strcmp(cmd, "show")) { printProfile(0); printProfile(1); return; }
+  if (!strcmp(cmd, "show")) { printProfile(0); printProfile(1); printImd(); return; }
   if (!strcmp(cmd, "presets")) {
     for (uint8_t i = 0; i < N_PRESETS; i++) { Serial.print(F("  ")); Serial.println(PRESETS[i].name); }
     return;
@@ -438,6 +506,14 @@ static void handleLine(char *line) {
     }
     saveSettings();
     Serial.println(F("Saved."));
+    return;
+  }
+
+  if (!strcmp(cmd, "imd")) {
+    if (a1 && !strcmp(a1, "required"))      cfg.imdRequired = 1;
+    else if (a1 && !strcmp(a1, "optional")) cfg.imdRequired = 0;
+    else { Serial.println(F("Usage: imd <required|optional>")); return; }
+    printImd();
     return;
   }
 
@@ -497,7 +573,12 @@ void setup() {
     digitalWrite(PINS[n].kill, LOW);
     pinMode(PINS[n].status, OUTPUT);
     digitalWrite(PINS[n].status, LOW);
+    pinMode(PINS[n].closed, OUTPUT);
+    digitalWrite(PINS[n].closed, LOW);
   }
+  pinMode(PIN_IMD_OK, INPUT);          // external 100k pull-down
+  pinMode(PIN_IMD_INHIBIT, OUTPUT);
+  digitalWrite(PIN_IMD_INHIBIT, LOW);  // reserved: IMD keeps measuring
   analogReadResolution(12);
 
   pwmTim = new HardwareTimer(TIM3);
@@ -510,10 +591,11 @@ void setup() {
   pwmTicks = pwmTim->getOverflow(TICK_FORMAT);
 
   Serial.begin(115200);
-  Serial.println(F("Contactor economizer v2. Type 'help'."));
+  Serial.println(F("Contactor economizer v3 (board rev B). Type 'help'."));
   loadSettings();
   printProfile(0);
   printProfile(1);
+  printImd();
 
   IWatchdog.begin(100000);   // 100 ms
 }
@@ -531,6 +613,10 @@ void loop() {
   uint32_t now = millis();
 
   vbat = readVolts(PIN_VBAT) / VBAT_V_PER_V;
+  bool imdNow = (digitalRead(PIN_IMD_OK) == HIGH);
+  if (imdNow && !imdOkRaw) tImdHigh = now;
+  imdOkRaw = imdNow;
+  imdOkQualified = imdNow && (now - tImdHigh >= IMD_QUALIFY_MS);
   for (uint8_t n = 0; n < 2; n++) runChannel(n, now, dt);
   IWatchdog.reload();
 
@@ -544,7 +630,12 @@ void loop() {
       Serial.print(F(" I=")); Serial.print(ch[n].amps, 3);
       Serial.print(F(" D=")); Serial.print(ch[n].duty * 100.0f, 1);
       Serial.print(F("% F=0x")); Serial.print(ch[n].faults, HEX);
+      if (ch[n].closed)  Serial.print(F(" CLOSED"));
+      if (ch[n].imdWarn) Serial.print(F(" W=IMD_LOST"));
     }
+    Serial.print(F(" | IMD="));
+    Serial.print(imdOkQualified ? F("ok") : imdOkRaw ? F("qual") : F("low"));
+    Serial.print(cfg.imdRequired ? F(" req") : F(" opt"));
     Serial.println();
   }
 }

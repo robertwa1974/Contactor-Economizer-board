@@ -40,23 +40,30 @@ def pt(x, y):
 # ---------------------------------------------------------------- placement
 # Shared parts (not mirrored): ref -> (x, y, rotation)
 SHARED = {
-    "J1": (30.5, 9.5, 0),
+    "J1": (29.0, 9.5, 0),          # 2x7: pads x = 29..47, centred on W/2
     "Q9": (38.0, 21.0, 90), "D3": (30.5, 24.0, 90), "R3": (30.5, 28.5, 90),
     "C1": (38.0, 32.0, 0), "C2": (45.5, 24.0, 90), "C3": (45.5, 29.0, 90),
     "D4": (38.0, 39.0, 0),
     "U2": (30.5, 35.0, 0), "C4": (30.5, 31.5, 0), "C5": (30.5, 39.0, 0),
     "U3": (45.5, 35.0, 0), "C7": (45.5, 32.0, 0), "C6": (45.5, 39.0, 0),
     "U1": (38.0, 50.0, 0), "C9": (30.5, 44.5, 0), "C10": (30.5, 47.5, 0), "C11": (30.5, 50.5, 0),
-    "R5": (45.6, 45.0, 90), "R6": (45.6, 49.0, 90), "C8": (45.6, 53.0, 90), "D6": (45.6, 57.0, 0),
-    "J2": (28.0, 61.0, 90), "J3": (44.0, 61.0, 90),
+    "R5": (45.6, 45.0, 90), "R6": (45.6, 49.0, 90), "C8": (45.6, 52.7, 90), "D6": (45.6, 56.4, 0),
+    # Right-angle headers, pins pointing off the bottom edge (pin 1 at the right-hand end).
+    "J2": (38.16, 61.0, 270), "J3": (49.08, 61.0, 270),
     "R4": (55.0, 61.5, 0), "D5": (59.0, 61.5, 0),
+    # IMD interface (rev B): socket bottom-left, far from the coil loops (top corners).
+    "J4": (9.5, 56.0, 90),
+    "R37": (9.5, 52.7, 90), "R38": (12.0, 52.7, 90), "R39": (14.5, 52.7, 90), "R40": (17.0, 52.7, 90),
+    "R41": (19.5, 52.7, 90), "R42": (22.0, 52.7, 90), "R43": (24.5, 52.7, 90),
+    "U10": (11.5, 63.5, 0), "U11": (17.0, 63.5, 0),
+    "F1": (45.5, 17.6, 0),
     "H1": (3.5, 3.5, 0), "H2": (W - 3.5, 3.5, 0), "H3": (3.5, H - 3.5, 0), "H4": (W - 3.5, H - 3.5, 0),
 }
 
 # Channel 1 parts by role (refs looked up from design.py order); channel 2 is mirrored about x = W/2.
 CH1_POWER = {
     # high side
-    "U4": (21.5, 15.0, 0), "D8": (22.5, 6.0, 0), "C13": (21.5, 20.0, 0),
+    "U4": (21.5, 15.0, 0), "D8": (21.0, 6.0, 0), "C13": (21.5, 20.0, 0),
     "R14": (15.0, 13.5, 90), "R15": (15.0, 18.0, 90),
     # low side and sense
     "D1": (12.5, 6.0, 0), "Q1": (9.0, 16.0, 90), "R1": (20.0, 26.0, 0),
@@ -312,6 +319,7 @@ def place():
         if p["ref"].startswith("H"):
             fp.Reference().SetVisible(False)
     outline(board)
+    hole_keepouts(board)   # before the DSN export, so Freerouting keeps clear too
     for fp in board.GetFootprints():
         if fp.GetValue() == "TPS1H100AQPWPRQ1":
             fanout(board, fp, ("8", "9", "10"))
@@ -327,13 +335,16 @@ def place():
                 v.SetWidth(mm(0.6)); v.SetDrill(mm(0.3)); v.SetNet(nets['GND']); v.SetIsFree(False); v.SetLocked(True)
                 board.Add(v)
     # Pin-1 marker on the front; full J1 pinout on the back silkscreen.
-    silk(board, "1", 28.6, 15.0, 0.8)
+    silk(board, "1", 27.1, 15.0, 0.8)
     silk(board, "J1 (pin side, view from top)", 38, 20.0, 1.0, pcbnew.B_SilkS)
-    silk(board, "row 1-6:  C1+  CMD1  +12V  GND  CMD2  C2+", 38, 22.0, 1.0, pcbnew.B_SilkS)
-    silk(board, "row 7-12: C1-  STA1  +12V  GND  STA2  C2-", 38, 24.0, 1.0, pcbnew.B_SilkS)
-    silk(board, "Two-channel contactor economizer rev A", 38, 45.0, 1.0, pcbnew.B_SilkS)
-    silk(board, "SWD 3V3 IO CK RST GND", 33.1, 64.2, 0.8)
-    silk(board, "UART TX RX GND", 46.5, 64.2, 0.8)
+    silk(board, "1-7:  C1+ CMD1 +12V MHS  GND CMD2 C2+", 38, 22.0, 1.0, pcbnew.B_SilkS)
+    silk(board, "8-14: C1- STA1 +12V OKHS GND STA2 C2-", 38, 24.0, 1.0, pcbnew.B_SilkS)
+    silk(board, "Two-channel contactor economizer rev B", 38, 40.0, 1.0, pcbnew.B_SilkS)
+    silk(board, "J4 IMD: 1 12V  3 OK   5 C1CL  7 INH  9 TX  11 MHS", 21, 45.0, 0.9, pcbnew.B_SilkS)
+    silk(board, "       2 GND  4 GND  6 C2CL  8 GND 10 RX  12 OKHS", 21, 46.6, 0.9, pcbnew.B_SilkS)
+    # Header labels above the pads; pin 1 is the right-hand pin of each right-angle header.
+    silk(board, "SWD GND RST CK IO 3V3", 33.1, 58.85, 0.8)
+    silk(board, "UART GND RX TX", 46.5, 58.85, 0.8)
     place_refs(board)
     board.BuildConnectivity()
     pcbnew.SaveBoard(PLACED, board)
@@ -435,8 +446,7 @@ def finish():
     # LoadBoard reads rules/netclasses from the .kicad_pro beside the board, and SaveBoard writes
     # them to econ.kicad_pro. Without a copy beside econ_placed, KiCad defaults would overwrite them.
     shutil.copyfile(os.path.join(HERE, "econ.kicad_pro"), PLACED.replace(".kicad_pcb", ".kicad_pro"))
-    board = pcbnew.LoadBoard(PLACED)
-    hole_keepouts(board)
+    board = pcbnew.LoadBoard(PLACED)   # hole keep-outs come from place()
     ses = os.path.join(HERE, "econ.ses")
     if os.path.exists(ses):
         print("SES import", pcbnew.ImportSpecctraSES(board, ses))
@@ -445,6 +455,12 @@ def finish():
     for t in board.GetTracks():
         if t.GetClass() == "PCB_TRACK" and t.GetWidth() < mm(0.15):
             t.SetWidth(mm(0.15))
+        # Freerouting occasionally mixes padstacks (0.6 mm pad, 0.45 mm drill). Keep the pad, shrink
+        # the drill to leave a 0.15 mm annular ring (JLCPCB min 0.3 mm drill still holds).
+        if t.GetClass() == "PCB_VIA":
+            w = t.GetWidth(pcbnew.F_Cu)
+            if (w - t.GetDrillValue()) / 2 < mm(0.1):
+                t.SetDrill(max(mm(0.3), w - mm(0.3)))
     # Solid (not thermal-relief) pour connection on pads that carry coil current to GND.
     solid = {"Q1": "3", "Q2": "3", "U4": "15", "U5": "15", "C1": "2", "C2": "2", "D4": "2"}
     for fp in board.GetFootprints():

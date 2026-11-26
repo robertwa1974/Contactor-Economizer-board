@@ -55,14 +55,16 @@ def C(value, a, b, block, fp=FP_C0603, note=""):
 
 # --------------------------------------------------------------------------- power
 B = "Power input"
-part("J", "Connector_Generic:Conn_02x06_Top_Bottom", "Micro-Fit 3.0 2x6",
-     "Connector_Molex:Molex_Micro-Fit_3.0_43045-1200_2x06_P3.00mm_Horizontal",
-     # CHANGE: 12-pin (was 10) so +12V and GND each get two 5 A contacts.
-     # Arranged in columns (pad n above pad n+6) so the board is mirror-symmetric:
-     # ch1 coil | ch1 cmd/stat | +12V | GND | ch2 cmd/stat | ch2 coil
-     {1: "COIL1_P", 7: "COIL1_N", 2: "CMD_1", 8: "STAT_1", 3: "+12V_IN", 9: "+12V_IN",
-      4: "GND", 10: "GND", 5: "CMD_2", 11: "STAT_2", 6: "COIL2_P", 12: "COIL2_N"},
-     B, mpn="Molex 43045-1200", note="Not at LCSC: buy from Digi-Key/Mouser, hand-solder", ref="J1")
+part("J", "Connector_Generic:Conn_02x07_Top_Bottom", "Micro-Fit 3.0 2x7",
+     "Connector_Molex:Molex_Micro-Fit_3.0_43045-1400_2x07_P3.00mm_Horizontal",
+     # CHANGE: 14-pin (rev B; was 12): +12V and GND each get two 5 A contacts, plus the IMD's
+     # MHS/OKHS outputs passed straight through from the stacking socket J4 to the VCU.
+     # Columns (pad n above pad n+7):
+     # ch1 coil | ch1 cmd/stat | +12V | IMD MHS/OKHS | GND | ch2 cmd/stat | ch2 coil
+     {1: "COIL1_P", 8: "COIL1_N", 2: "CMD_1", 9: "STAT_1", 3: "+12V_IN", 10: "+12V_IN",
+      4: "IMD_MHS", 11: "IMD_OKHS", 5: "GND", 12: "GND", 6: "CMD_2", 13: "STAT_2",
+      7: "COIL2_P", 14: "COIL2_N"},
+     B, mpn="Molex 43045-1400", note="Not at LCSC: buy from Digi-Key/Mouser, hand-solder", ref="J1")
 part("Q", "Transistor_FET:Q_PMOS_GDS", "AOD4185", FP_TO252,
      {1: "Q_REV_G", 2: "+12V_IN", 3: "VBB"}, B, mpn="AOD4185", lcsc="C400894",
      note="Reverse-polarity P-FET: drain = input, source = VBB", ref="Q9")
@@ -104,18 +106,23 @@ part("U", "MCU_ST_STM32G0:STM32G031K8Tx", "STM32G031K8T6", "Package_QFP:LQFP-32_
      {4: "+3V3", 5: "GND", 6: "NRST",
       7: "ISENSE_1", 8: "ISENSE_2", 9: "UART_TX", 10: "UART_RX", 11: "VBAT_SENSE",
       13: "PWM_1", 14: "PWM_2", 15: "CMD_SENSE_1", 16: "CMD_SENSE_2",
-      28: "KILL_1", 29: "KILL_2", 30: "HS_ST_1", 31: "HS_ST_2",
+      # CHANGE (rev B): HS_ST moved PB6/PB7 -> PB8/PB9 so USART1 (PB6 TX, PB7 RX, AF0) can reach
+      # the IMD socket. HS_ST is polled, not EXTI; even so, no other input shares lines 8/9.
+      28: "KILL_1", 29: "KILL_2", 32: "HS_ST_1", 1: "HS_ST_2",
+      30: "IMD_TX", 31: "IMD_RX",
+      26: "IMD_OK", 18: "CONT1_CLOSED", 20: "CONT2_CLOSED", 27: "IMD_INHIBIT",
       22: "STATUS_1", 23: "STATUS_2", 24: "SWDIO", 25: "SWCLK",
-      1: None, 2: None, 3: None, 12: None, 17: None, 18: None, 20: None, 26: None, 27: None, 32: None},
+      2: None, 3: None, 12: None, 17: None},
      B, mpn="STM32G031K8T6", lcsc="C432203", ref="U1",
      note="Pin 22 = PA11, pin 23 = PA12 (default, no remap)")
 C("100n", "+3V3", "GND", B)
 C("4.7u", "+3V3", "GND", B)
 C("100n", "NRST", "GND", B)
-part("J", "Connector_Generic:Conn_01x05", "SWD", "Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical",
-     {1: "+3V3", 2: "SWDIO", 3: "SWCLK", 4: "NRST", 5: "GND"}, B, note="ST-Link: 3V3 SWDIO SWCLK NRST GND")
-part("J", "Connector_Generic:Conn_01x03", "UART", "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical",
-     {1: "UART_TX", 2: "UART_RX", 3: "GND"}, B, note="3.3 V USB-serial: board TX, board RX, GND")
+# CHANGE (rev B): right-angle headers pointing off the bottom edge, reachable with the IMD stacked.
+part("J", "Connector_Generic:Conn_01x05", "SWD", "econ:PinHeader_1x05_P2.54mm_Horizontal_Edge",
+     {1: "+3V3", 2: "SWDIO", 3: "SWCLK", 4: "NRST", 5: "GND"}, B, note="Right angle. ST-Link: 3V3 SWDIO SWCLK NRST GND")
+part("J", "Connector_Generic:Conn_01x03", "UART", "econ:PinHeader_1x03_P2.54mm_Horizontal_Edge",
+     {1: "UART_TX", 2: "UART_RX", 3: "GND"}, B, note="Right angle. 3.3 V USB-serial: board TX, board RX, GND")
 
 # --------------------------------------------------------------------------- per channel
 for n in (1, 2):
@@ -180,6 +187,29 @@ for n in (1, 2):
     R("100k", "STATUS" + s, "GND", B)
     R("1k", "STATUS" + s, "LED_ST" + s, B)
     part("D", "Device:LED", "green", FP_LED, {1: "GND", 2: "LED_ST" + s}, B)
+
+# --------------------------------------------------------------------------- IMD interface (rev B)
+# Stacking socket for an optional insulation-monitor (IMD) board mounted above on 15 mm nylon standoffs.
+# Added last so existing reference designators do not change.
+B = "IMD interface"
+part("J", "Connector_Generic:Conn_02x06_Odd_Even", "IMD socket 2x6",
+     "Connector_PinSocket_2.54mm:PinSocket_2x06_P2.54mm_Vertical",
+     {1: "12V_PROT", 2: "GND", 3: "IMD_OK_EXT", 4: "GND", 5: "CONT1_CLOSED_EXT", 6: "CONT2_CLOSED_EXT",
+      7: "IMD_INHIBIT_EXT", 8: "GND", 9: "IMD_TX_EXT", 10: "IMD_RX_EXT", 11: "IMD_MHS", 12: "IMD_OKHS"},
+     B, mpn="2x6 female socket, 2.54 mm, 8.5 mm tall",
+     note="Hand-solder. Pin 9 = economizer TX (to IMD RX). 11/12 pass straight to J1 4/11")
+part("F", "Device:Polyfuse", "0.2A 60V", "Fuse:Fuse_1812_4532Metric", {1: "VBB", 2: "12V_PROT"}, B,
+     mpn="MF-MSMF020/60",
+     note="Bourns PTC: 0.20 A hold, 0.40 A trip, 60 V, 40 A Imax; IMD short cannot blow the harness fuse")
+for net in ("IMD_OK", "CONT1_CLOSED", "CONT2_CLOSED", "IMD_INHIBIT", "IMD_TX", "IMD_RX"):
+    R("1k", net, net + "_EXT", B, note="Series protection, MCU <-> IMD socket")
+R("100k", "IMD_OK", "GND", B, note="Missing or dead IMD reads as not OK")
+part("U", "Power_Protection:SRV05-4", "SRV05-4", "Package_TO_SOT_SMD:SOT-23-6",
+     {1: "IMD_OK_EXT", 2: "GND", 3: "CONT1_CLOSED_EXT", 4: "CONT2_CLOSED_EXT", 5: "+5V", 6: "IMD_INHIBIT_EXT"},
+     B, mpn="SRV05-4", note="ESD on socket logic pins")
+part("U", "Power_Protection:SRV05-4", "SRV05-4", "Package_TO_SOT_SMD:SOT-23-6",
+     {1: "IMD_TX_EXT", 2: "GND", 3: "IMD_RX_EXT", 4: None, 5: "+5V", 6: None},
+     B, mpn="SRV05-4", note="ESD on socket UART pins")
 
 # --------------------------------------------------------------------------- mechanical
 for i in range(4):
