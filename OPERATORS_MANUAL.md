@@ -59,6 +59,7 @@ For stacking an IMD board (section 8):
 | Micro-Fit crimp tool (or pre-crimped leads) | Making the harness |
 | Multimeter | Power-up checks |
 | 12 V bench supply with adjustable current limit | Power-up and bench test |
+| A second bench supply that can deliver 5–10 A, and a meter with a 0.1 mV range | Contactor contact-resistance check (section 6.1) |
 | **ST-Link programmer**: either an ST-Link V2 clone with female–female jumper wires, or a genuine STLINK-V3MINIE with a 14-pin-to-2.54 mm adapter | Loading the firmware (once) |
 | **USB-to-serial adapter, 3.3 V** (CP2102 or FTDI type, set to 3.3 V, *not* 5 V). Not needed with the STLINK-V3MINIE, which has its own serial port. | Choosing the contactor type |
 | A computer with VS Code and the PlatformIO extension, and this repository | Building and loading the firmware |
@@ -270,6 +271,42 @@ keep the serial monitor open with `log on`.
 
 A quick fault check: with **no** coil connected, closing the CMD switch should give `ch1 FAULT`
 within 0.2 s, with a fault code such as `F=0x11`. Opening the switch clears it.
+
+### 6.1 Contactor resistance check
+
+Do this for every contactor, especially salvaged ones. A used contactor can click and show continuity
+on a meter, yet have pitted contacts with a high resistance that varies from one closure to the next.
+Under traction current, those contacts overheat.
+
+**Coil resistance.** Measure it with nothing connected, across the two coil terminals. It should be
+within about 10 % of the figure for the preset you chose: 4.8 Ω for the GV200-005, 23 Ω for the GER150
+and 26 Ω for the AEV14012 (BMW variant). Use a cold contactor, because the reading rises as the coil
+warms. An open coil, a short circuit or a figure far from the preset means the contactor is faulty, or
+you have chosen the wrong preset.
+
+**Main contact resistance.** An ordinary meter can't read this. A good contact is well under 1 mΩ, below
+a meter's lead resistance. Instead, pass a known current through the contacts and measure the voltage
+across them:
+
+1. Keep the main studs disconnected from HV.
+2. Hold the contactor closed with the board, as in step 3 above.
+3. Use a second bench supply, set to about 1 V and a current limit of 5–10 A. Connect its leads to the
+   two main studs with ring lugs. The supply then runs in constant-current mode. Note the current, I.
+4. With a meter on its lowest DC millivolt range, put the probes directly on the two studs, inside the
+   supply's lugs. Note the voltage, V.
+5. Contact resistance = V / I. For example, 1.5 mV at 5 A is 0.3 mΩ.
+6. Turn the current supply's output off, release the CMD switch, close it again, and turn the
+   output back on. Repeat steps 3–5 a few times. Switching the current off first means the contacts
+   never break the test current.
+
+What the readings mean:
+
+- **Good:** under 1 mΩ, steady from one closure to the next, and close to the other contactor's reading.
+  Where the datasheet gives a contact resistance figure, compare against that.
+- **Reject:** above about 1 mΩ, several times the other contactor's reading, or changing noticeably
+  between closures. Don't fit that contactor.
+- With the contactor **open**, the meter should show the supply's full voltage across the studs and no
+  current should flow. Any current means the contacts are welded or bridged.
 
 ---
 
