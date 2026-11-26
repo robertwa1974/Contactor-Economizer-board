@@ -1,0 +1,15 @@
+.pio/
+.vscode/
+*-backups/
+fp-info-cache
+*.kicad_prl
+_autosave-*
+*.lck
+erc.rpt
+econ.net
+__pycache__/
+hw/econ.dsn
+hw/econ_placed.kicad_pcb
+hw/drc.rpt
+hw/fab/gerbers/
+freerouting*.jar

@@ -1,0 +1,38 @@
+Comment,Designator,Footprint,LCSC Part #,MPN,Qty,Notes
+Micro-Fit 3.0 2x6,J1,Molex_Micro-Fit_3.0_43045-1200_2x06_P3.00mm_Horizontal,,Molex 43045-1200,1,"HAND-SOLDER (not in CPL). Not at LCSC: buy from Digi-Key/Mouser, hand-solder"
+AOD4185,Q9,TO-252-2,C400894,AOD4185,1,"Reverse-polarity P-FET: drain = input, source = VBB"
+10k,"R3,R8,R9,R10,R12,R15,R18,R23,R24,R25,R27,R30,R33",R_0603_1608Metric,,,13,
+15V,D3,D_SOD-123,,MMSZ5245B (15 V),1,Q9 gate-source clamp
+SMBJ24A,D4,D_SMB,C224017,SMBJ24A,1,TVS1 load-dump clamp (unidirectional)
+47u 50V,C1,CP_Elec_6.3x7.7,,,1,"Bulk, damps harness inductance"
+10u 50V,C2,C_1206_3216Metric,,,1,
+100n 50V,"C3,C13,C18",C_0603_1608Metric,,,3,
+TPS7B6950QDBVRQ1,U2,SOT-23-5,C132202,TPS7B6950QDBVRQ1,1,
+1u 50V,C4,C_0805_2012Metric,,,1,LDO input
+10u 16V,C5,C_0805_2012Metric,,,1,"LDO output, needs >=2.2 uF effective"
+AP2112K-3.3,U3,SOT-23-5,C51118,AP2112K-3.3TRG1,1,
+1u,"C6,C7,C14,C19",C_0603_1608Metric,,,4,C14: Driver VDD; C19: Driver VDD
+1k,"R4,R21,R36",R_0603_1608Metric,,,3,
+green,"D5,D9,D12",LED_0603_1608Metric,,,3,D5: Power LED
+100k,"R5,R13,R17,R20,R28,R32,R35",R_0603_1608Metric,,,7,R17: Holds Q off without +5V; R32: Holds Q off without +5V
+15k,"R6,R11,R26",R_0603_1608Metric,,,3,
+100n,"C8,C9,C11,C15,C20",C_0603_1608Metric,,,5,
+BAT54S,"D6,D7,D10",SOT-23,C171786,BAT54S,3,
+STM32G031K8T6,U1,LQFP-32_7x7mm_P0.8mm,C432203,STM32G031K8T6,1,"Pin 22 = PA11, pin 23 = PA12 (default, no remap)"
+4.7u,C10,C_0603_1608Metric,,,1,
+SWD,J2,PinHeader_1x05_P2.54mm_Vertical,,,1,HAND-SOLDER (not in CPL). ST-Link: 3V3 SWDIO SWCLK NRST GND
+UART,J3,PinHeader_1x03_P2.54mm_Vertical,,,1,"HAND-SOLDER (not in CPL). 3.3 V USB-serial: board TX, board RX, GND"
+2.2k,"R7,R22",R_1206_3216Metric,,,2,Pull-up for VCU low-side output
+10n 50V,"C12,C17",C_0603_1608Metric,,,2,Harness noise filter
+2N7002,"Q3,Q4,Q5,Q6,Q7,Q8",SOT-23,C8545,2N7002,6,"Q3: Inverts command: VCU low -> EN high; Q4: MCU can force the high side OFF, never ON; Q5: Open drain to VCU: low = holding, no fault; Q6: Inverts command: VCU low -> EN high; Q7: MCU can force the high side OFF, never ON; Q8: Open drain to VCU: low = holding, no fault"
+TPS1H100AQPWPRQ1,"U4,U5",Texas_HTSSOP-14-1EP_4.4x5mm_P0.65mm_EP3.4x5mm_Mask3.155x3.255mm,C478465,TPS1H100AQPWPRQ1,2,DIAG_EN high enables ST; CL sets ~6.3 A
+390,"R14,R29",R_0603_1608Metric,,,2,I_lim = 1.233 V x 2000 / R = 6.3 A (+/-14%)
+SMBJ28A,"D8,D11",D_SMB,,SMBJ28A,2,"Release clamp across U4: K=VBB, A=COIL+. Vbr 31-34 V < 50 V internal clamp"
+30m 1W,"R1,R2",R_2512_Kelvin,C2930482,RLP25FECR030,2,Kelvin: sense pads 2/3 net-tied to 1/4
+SS36,"D1,D2",D_SMA,C727061,SS36,2,Freewheel to VBB
+AOD2610E,"Q1,Q2",TO-252-2,C282428,AOD2610E,2,
+UCC27517DBVR,"U8,U9",SOT-23-5,C99395,UCC27517DBVR,2,
+10,"R16,R31",R_0603_1608Metric,,,2,
+INA240A1PW,"U6,U7",TSSOP-8_4.4x3mm_P0.65mm,C93965,INA240A1PWR,2,
+20k,"R19,R34",R_0603_1608Metric,,,2,
+10n,"C16,C21",C_0603_1608Metric,,,2,
